@@ -1,0 +1,241 @@
+---
+title: "Tour de France - Animated bar plot"
+author: "Andrea Scalco"
+date: "13/04/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Weekly objective
+
+Given that this week the data is from the Tour de France and it contains information about each edition's winner, I thought about plotting the number of victories by each nation. Then, animate the plot to show the number of victories over the editions.
+
+## Packages
+
+
+```{r packages, results='hide', message=FALSE}
+# For general purposes
+library(tidyverse)
+# To create and animate plots
+library(gganimate)
+
+```
+
+## Data retrieve
+
+```{r data retrieve} 
+# TidyTuesday (tt) main repo
+tt_git_url <- "https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020"
+
+# 2020.04.04 datasets
+tdf_winners <- readr::read_csv(paste(tt_git_url, "2020-04-07/tdf_winners.csv", sep="/"))
+
+# Inspect data
+glimpse(tdf_winners)
+```
+
+## Data wrangle: prepare the dataset for bar plots
+
+The original dataset had already been ready count per each year the victories per nations, like this:
+
+```{r dataset}
+# This returns the number of victories at the present time
+tdf_winners %>%
+  group_by(nationality) %>%
+  summarise(n.victories = n()) %>%
+  ggplot(aes(x=nationality, y=n.victories)) +
+  geom_col(aes(fill=nationality)) + 
+  coord_flip()
+```
+
+To build an animation from the first to the last edition of the number of victories, I need to get this kind of table done for each edition in a single dataset. I can select specific editions by filtering them:
+
+```{r datasets split by edition}
+# I can get in this way the victories for a specific range of editions
+# Only the first 2 editions
+tdf_winners %>%
+  filter(edition %in% c(1:2)) %>%
+  group_by(nationality) %>%
+  summarise(n.victories = n())
+# Only the first 7 editions
+tdf_winners %>%
+  filter(edition %in% c(1:7)) %>%
+  group_by(nationality) %>%
+  summarise(n.victories = n())
+# Only from the last 10 editions
+tdf_winners %>%
+  filter(edition %in% c(max(edition)-10:max(edition))) %>%
+  group_by(nationality) %>%
+  summarise(n.victories = n())
+
+```
+
+
+Now, a loop looks suitable to iterate over the editions So, let's first arrange a empty where each single dataset of victories will be stored. Then, we will merge them together in a single  coherent dataset.
+
+```{r arrange new dataset}
+# First, arrange a empty list where that will be used in the loop
+temp_list <- list()
+# Iterate over the edition, keeping fixed the starting point (ie the first edition)
+for (ed in (1:max(tdf_winners$edition))) {
+  # create the df like seen before for a specific range of editions
+  df_ed <- tdf_winners %>%
+    filter(edition %in% c(1:ed)) %>%
+    group_by(nationality) %>%
+    summarise(n.victories = n())
+  # add to the df the number of the edition (ie the loop index)
+  df_ed$edition <- ed
+  # store the df into the list
+  temp_list[[ed]] <- df_ed
+}
+# As said, in the end this now contains a list of dataset
+temp_list[1:3]
+```
+
+```{r merge tdf_winners_2}
+# Merge together dataframes previously generate using bind_rows() function from dplyr package
+tdf_winners_2 <- bind_rows(temp_list)
+# Inspect head and tail
+head(tdf_winners_2); tail(tdf_winners_2)
+```
+
+Note that for the earlier editions some countries are not present. For instance, for the first edition the dataset does not reported all nations but only the winner (ie France). However, this is not a problem for the animation, as it will take *all* the unique categories that it will find.
+
+## Animate
+
+```{r animate}
+# Plot and animate bar chart
+tdf_winners_2 %>%
+  ggplot(aes(x=nationality, y=n.victories)) +
+  geom_col() +
+  coord_flip() + 
+  labs(y="Number of victories", x="Country", title="Number of victories by country over the editions", subtitle="Edition {frame}") +
+  transition_manual(edition)
+```
+
+## Make it pretty
+
+Let's give to the plot just a bit more of style by editing the theme.
+
+```{r pretty plot}
+# Store animated -pretty- bar plot
+animated_bar_plot <-   
+  tdf_winners_2 %>%
+  ggplot(aes(x=nationality, y=n.victories)) +
+  geom_col(fill = "white", color="white", size=1.05, width=0.1) +
+  geom_text(data=tdf_winners_2 %>% filter(n.victories > 0),
+    aes(label=n.victories, x=nationality, y=(n.victories+0.75)), fontface="bold", size = 3) +
+  coord_flip() +
+  # Add custom image on top of the column
+  #geom_image(aes(image = img, y=n.victories+1.75)) +
+  labs(y="", x="", title="Number of victories by country", 
+       subtitle="Tour de France - {frame} Edition") +
+  theme_classic() +
+  theme(text = element_text(family="mono"),
+        panel.background = element_rect(fill = "#fbad29"),
+        plot.background = element_rect(fill = "#fbad29"),
+        axis.ticks = element_blank(),
+        plot.title = element_text(face="bold", colour="black", size=24),
+        plot.subtitle = element_text(face="bold", colour="white", size=18),
+        axis.text.y = element_text(face="bold", size=15, color="white", margin=margin(0.1,5,0.1,0.1,"mm")),
+        axis.text.x = element_text(face="bold", color="black", size=15),
+        axis.line.y = element_blank(),
+        axis.line.x = element_line(color="black"),
+        axis.title.x = element_text(face="bold", color="white", size=15),
+        plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm")
+        ) +
+  transition_manual(frames=edition)
+```
+
+# Animate and export
+
+```{r save}
+animate(animated_bar_plot, width=900, height=500,
+        end_pause=20, nframes=106, fps=10)
+
+anim_save("TDF.gif")
+```
+
+## Notes
+
+Note that here we used "transition_manual()" from the gganimate package. A better way would be to use "transition_state()". This cannot applied here because data is not organized in a way that reports countries with no victories on a certain year. The next step would be to expand the dataset by including also countries with zero victories for each year where they are missing.
+
+This next chunks of code create a more comprehensive dataset, where for each year each countries is listed along with the number of victories (even if they had 0 victories).
+
+```{r full dataset, results='hide', message=FALSE, warning=FALSE}
+
+#### Preparation ####
+
+# For the outer loop, arrange an empty list that will be used to store the result of each edition (this loop is the same performed above)
+ed_list <- list()
+
+# For the inner loop (this is new, it add missing countries when victories are zero), create a vector with countries names
+# NB: use str_trim() to remove white space present at the start of each country name
+# Remove the whitespace at the beginning of each country name from the original dataset
+tdf_winners$nationality <- stringr::str_trim(tdf_winners$nationality)
+# Save list of countries in a separate list
+countries <- stringr::str_trim(unique(tdf_winners$nationality)); countries
+
+#### Iterate to re-arrange data ####
+
+# Iterate over the original dataset
+for (ed in (1:max(tdf_winners$edition))) {
+  # create the df for a specific range of editions
+  df_ed <- tdf_winners %>%
+    filter(edition %in% c(1:ed)) %>%
+    group_by(nationality) %>%
+    summarise(n.victories = n())
+  # add to the df the number of the edition (ie the loop index)
+  df_ed$edition <- ed
+  
+  # Check presence and add countries if not present
+  # First, arrange temp vars for the loop
+  # Initialise i index
+  i = 1
+  # Arrange an empty list and an empty df
+  supp_info_list <- list()
+  supp_info_df <- data.frame()
+  # Iterate over countries vector
+  for (c in countries) { 
+    if (!(c %in% stringr::str_trim(df_ed$nationality))) {
+      supp_info <- data.frame(nationality = c, n.victories = as.integer(0), edition = as.integer(df_ed$edition[1]))
+      print(supp_info)
+      supp_info_list[[i]] <- supp_info
+      i = i + 1
+    }
+  }
+  # Bind missing countries in a comprehensive df
+  supp_info_df <- bind_rows(supp_info_list)
+  
+  # Bind supplementary info with main df of the edition
+  df_ed_full <- data.frame()
+  df_ed_full <- bind_rows(df_ed, supp_info_df)
+  
+  # store the final df for the edition into the list
+  ed_list[[ed]] <- df_ed_full
+}
+```
+
+```{r merge tdf_winners_3}
+#### Review and merge data ####
+
+# In the end this now contains a list of dfs complete with all countries even if when they have 0 victories, for instance:
+ed_list[1:3]
+# Merge all them together using bind_rows() from dplyr
+tdf_winners_3 <- bind_rows(ed_list)
+```
+
+```{r checks}
+# Inspect head and tail
+head(tdf_winners_3); tail(tdf_winners_3)
+# Inspect 1st and last edition
+tdf_winners_3 %>% filter(edition == 1)
+tdf_winners_3 %>% filter(edition == max(edition))
+# Check nationality are coherent with no difference due to, eg, white spaces
+unique(tdf_winners_3$nationality)
+# Inspect no. of countries per edition: are there 14 countries for each edition?
+tdf_winners_3 %>% group_by(edition) %>% summarise(n()) # yes
+```
