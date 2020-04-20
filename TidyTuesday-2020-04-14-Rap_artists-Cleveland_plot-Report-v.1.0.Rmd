@@ -1,0 +1,149 @@
+---
+title: "BBC Rap Song - Cleveland plot"
+author: "Andrea Scalco"
+date: "20/04/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+```
+
+## Packages
+
+Load packages required.
+
+```{r packages, results='hide', message=FALSE}
+# Tidy/wrangle/vis data
+library(tidyverse)
+# For enhanched texts
+library(ggtext)
+# To scrape data from wikipedia
+library(rvest)
+# To clean scraped data
+library(stringr)
+```
+
+## Data retrieve 
+
+Retrieve data from tidytuesday repository.
+
+```{r data retrieve, results='hide', message=FALSE}
+# TidyTuesday (tt) main repo
+tt_git_url <- "https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020"
+
+# 2020.04.14 datasets
+rankings <- readr::read_csv(paste(tt_git_url, "2020-04-14/rankings.csv", sep="/"))
+```
+
+## Get wiki data
+
+Collect information about artist activity years from wikipedia. First, create the wiki url of each artist.
+
+```{r prepare wiki urls}
+# Create a new col with wiki url
+rankings_top10 <- rankings %>%
+  top_n(10, points) %>%
+  # Replace whitespaces with "_"
+  mutate(wiki_artist = str_replace_all(artist, " ", "_")) %>%
+  # Replace "&" with "and"
+  mutate(wiki_artist = str_replace_all(wiki_artist, "&", "and")) %>%
+  # Remove everything after "_ft."
+  mutate(wiki_artist = str_remove(wiki_artist, "_ft.(.*)")) %>%
+  # Create full link
+  mutate(wiki_artist = paste("https://en.wikipedia.org/wiki/", wiki_artist, sep=""))
+
+# Inspect new col
+rankings_top10$wiki_artist
+
+# One wrong due to disambiguation, manual edit:
+rankings_top10[rankings_top10$artist == "Public Enemy",]$wiki_artist <- "https://en.wikipedia.org/wiki/Public_Enemy_(band)"
+```
+
+Second, arrange a function to scrape wikipedia information and get the required information.
+
+```{r}
+# Function to get activity years from wiki
+get_activity_years <- function(wiki_page) {
+  wiki_html <- read_html(wiki_page)
+  wiki_data <- html_nodes(wiki_html, "td, th")
+  dates <- ""
+  for (i in 1:length(wiki_data)) {
+    if (str_detect(as.character(wiki_data[i]), "Years")) {
+      dates <- as.character(wiki_data[i+1])
+      break
+    }
+  }
+  dates <- str_replace_all(dates, "<td>|</td>", "")
+  return(toString(dates))
+}
+
+# Test function on a single case
+get_activity_years("https://en.wikipedia.org/wiki/The_Notorious_B.I.G.")
+```
+
+Third, run previous function over wikipedia URLs.
+
+```{r}
+# Add a column with the wiki data (use map_chr() from purrr package to iterate)
+rankings_top10 <- rankings_top10 %>%
+  mutate(activity_years = map_chr(wiki_artist, possibly(get_activity_years, NA_character_)))
+
+# Extract start act year from wiki data
+rankings_top10 <- rankings_top10 %>%
+  # Get the year (ie the first 4 digits that appears in the data)
+  mutate(activity_start = str_extract(activity_years, "[0-9][0-9][0-9][0-9]")) %>%
+  # Convert from char to integer
+  mutate(activity_start = as.integer(activity_start))
+```
+
+## Plot
+
+Plot the artist' debut year and the song's year release. Export plot.
+
+```{r}
+# Paste title and artits into one column and covert into fact to preserve the order in the plot
+rankings_top10 <- rankings_top10 %>%
+  mutate(title_artist = paste(title, artist, sep=" - ")) %>%
+  mutate(title_artist = factor(title_artist, levels=rev(title_artist)))
+
+# Define colors to use in the plot
+yel1 <- "#FFDF01"
+yel2 <- "#EAA21E"
+pur1 <- "#560D7F"
+blu1 <- "#7a78f0"
+
+# Plot 
+rap_plot <- rankings_top10 %>%
+  ggplot(aes(y=title_artist)) +
+  geom_segment(aes(x=activity_start, xend=year, y=title_artist, yend=title_artist), color="white") +
+  geom_point(aes(x=activity_start), col=yel2, size=5) +
+  geom_point(aes(x=year), col="royalblue", size=2.5) +
+  geom_label(aes(label=ID, x=min(rankings_top10$activity_start)-1.25), size=5, fill=blu1, color="white") +
+  scale_x_continuous(limits=c(min(rankings_top10$activity_start)-1.25, max(rankings_top10$year))) +
+  theme_minimal() +
+  theme(plot.title = element_markdown(color="white"),
+        plot.subtitle = element_markdown(color="white"),
+        panel.background = element_rect(fill=pur1, color=pur1),
+        plot.background = element_rect(fill=pur1),
+        axis.line.x = element_line(color="white"),
+        axis.line.y = element_blank(),
+        axis.text = element_text(color=yel1, face="bold"),
+        axis.text.y = element_text(size=10),
+        axis.title = element_text(color="white", face="bold"),
+        panel.grid.major = element_blank(),
+        axis.ticks.x = element_line(color="white")
+        ) +
+  labs(title = "**<span style='color:#FFDF01'>Artist's debut</span>**
+       and **<span style='color:#7a78f0' >song's year release</span>**(Top 10 BBC Music poll)",
+       x = "", y = "",
+       subtitle = "Sources - Poll by: BBC Music. Dataset by: S. Jockers. Artist debut year: Wikipedia.") 
+
+# Export
+ggsave(plot=rap_plot,
+       filename="rap_plot.png",
+       dpi=150,
+       width=275, height=175, unit="mm")
+
+```
+
