@@ -9,4 +9,4 @@ The table below reports the date and topic of each tidytuesday. The third column
 | 2020-04-03 | US Beer production |  plotly | Interactive choropleth map |
 | 2020-04-09 | Tour de France | gganimate | Animated bar plot |
 | 2020-04-14 | Best Rap Artists	by BBC Music | ggtext, rvest | Cleveland plot |
-| 2020-05-12 | Volcanoes | ggtext, ggrepel, maps, patchwork | Map (static), Bar plot, Heatmap |
+| 2020-05-12 | Volcanoes | ggtext, ggrepel, maps, patchwork, hrbrthemes | Map (static), Bar plot, Heatmap |
