@@ -1,7 +1,7 @@
 # TidyTuesday 
 A collection of TidyTuesday scripts.
 
-## Summarty of TidyTuesday submissions
+## Summary of TidyTuesday submissions
 The table below reports the date and topic of each tidytuesday. The third column reports the packages (beside those included in the tidyverse) used that week. The fourth records the main outcomes produced by the script.
 
 | Date | Description | Packages used | Output |
