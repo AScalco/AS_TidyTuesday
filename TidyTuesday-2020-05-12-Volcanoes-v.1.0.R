@@ -14,6 +14,7 @@ library(ggrepel)
 library(patchwork)
 # For enhanched texts description
 library(ggtext)
+# For additional themes
 library(hrbrthemes)
 # DATA --------------------------------------------------------------------
 
